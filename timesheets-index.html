@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Harder Contracting — Timesheets</title>
+
+<meta name="theme-color" content="#1B1F19" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Timesheets" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<script>
+  window.__loadStatus = {};
+</script>
+
+<script src="https://cdn.tailwindcss.com" onload="window.__loadStatus['tailwind']='ok'" onerror="window.__loadStatus['tailwind']='FAILED'"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" onload="window.__loadStatus['react']='ok'" onerror="window.__loadStatus['react']='FAILED'"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" onload="window.__loadStatus['react-dom']='ok'" onerror="window.__loadStatus['react-dom']='FAILED'"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js" onload="window.__loadStatus['babel']='ok'" onerror="window.__loadStatus['babel']='FAILED'"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" onload="window.__loadStatus['firebase-app']='ok'" onerror="window.__loadStatus['firebase-app']='FAILED'"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" onload="window.__loadStatus['firebase-db']='ok'" onerror="window.__loadStatus['firebase-db']='FAILED'"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" onload="window.__loadStatus['firebase-auth']='ok'" onerror="window.__loadStatus['firebase-auth']='FAILED'"></script>
+
+<style>
+  html, body {
+    background: #1B1F19;
+    background: radial-gradient(ellipse 120% 80% at 50% -10%, #232D20 0%, #1B1F19 55%);
+    margin: 0; padding: 0;
+  }
+  #root { min-height: 100vh; }
+  #root {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<!-- Same on-screen fatal-error reporting as the work order board, so a
+     broken load shows a real message instead of a blank screen. -->
+<script>
+  window.addEventListener('error', function (e) {
+    const root = document.getElementById('root');
+    if (root.children.length > 0) return;
+    showFatalError((e.message || 'Script failed to load') + (e.filename ? '\n\nFile: ' + e.filename + (e.lineno ? ':' + e.lineno : '') : ''));
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    const root = document.getElementById('root');
+    if (root.children.length > 0) return;
+    showFatalError('Unhandled error: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+  });
+  function showFatalError(msg) {
+    const root = document.getElementById('root');
+    if (root.dataset.errorShown) return;
+    root.dataset.errorShown = '1';
+    const status = window.__loadStatus || {};
+    const lines = ['tailwind', 'react', 'react-dom', 'babel', 'firebase-app', 'firebase-db', 'firebase-auth'].map(function (k) {
+      return k + ': ' + (status[k] || 'never finished loading');
+    });
+    root.innerHTML =
+      '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;font-family:sans-serif;color:#ECE8DF;background:#1B1E20;text-align:center;">' +
+      '<div style="max-width:520px;"><h1 style="color:#E8622C;font-size:1.4rem;">Something went wrong loading the app</h1>' +
+      '<p style="margin-top:1rem;">This can happen on a fresh launch with a weak signal. Try again first:</p>' +
+      '<button onclick="window.location.reload()" style="margin-top:1rem;padding:0.75rem 1.5rem;font-size:1rem;font-weight:bold;background:#7FA37E;color:#1B1F19;border:none;border-radius:8px;cursor:pointer;">Try again</button>' +
+      '<p style="margin-top:1.5rem;">If it keeps happening, screenshot this and send it back:</p>' +
+      '<pre style="text-align:left;background:#242829;padding:1rem;border-radius:8px;overflow:auto;font-size:0.75rem;white-space:pre-wrap;">' +
+      String(msg).replace(/</g, '&lt;') + '\n\n' + lines.join('\n') + '</pre></div></div>';
+  }
+  setTimeout(function () {
+    const root = document.getElementById('root');
+    if (root.dataset.errorShown) return;
+    if (root.children.length > 0) return;
+    const status = window.__loadStatus || {};
+    const lines = ['tailwind', 'react', 'react-dom', 'babel', 'firebase-app', 'firebase-db', 'firebase-auth'].map(function (k) {
+      return k + ': ' + (status[k] || 'never finished loading');
+    });
+    showFatalError('The app never finished starting up. Here is what loaded:\n\n' + lines.join('\n'));
+  }, 6000);
+</script>
+
+<!-- Same Firebase project as the work order board — this is intentional,
+     it's what makes one PIN work across both apps. -->
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyAcKWZYgawRHLBIqbUWPPYHmP812_4gODI",
+    authDomain: "harder-contracting.firebaseapp.com",
+    databaseURL: "https://harder-contracting-default-rtdb.firebaseio.com",
+    projectId: "harder-contracting",
+    storageBucket: "harder-contracting.firebasestorage.app",
+    messagingSenderId: "337605513419",
+    appId: "1:337605513419:web:f599c3a5fa57f005ed4b4e"
+  };
+  firebase.initializeApp(firebaseConfig);
+</script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+// ---- Same visual identity as the work order board ----
+const COLORS = {
+  bg: '#1B1F19',
+  surface: '#242A22',
+  surfaceRaised: '#2E362C',
+  ink: '#F0EFE6',
+  inkDim: '#9BAA95',
+  line: '#3A4436',
+  accent: '#7FA37E',
+  accentDim: '#5C7D5D',
+  manila: '#D9D4B4',
+  ink2: '#262B21',
+};
+
+const FONT_STYLE = (
+  <style>{`
+    * { box-sizing: border-box; }
+    .font-display { font-family: 'Rajdhani', sans-serif; }
+    .font-body { font-family: 'Inter', sans-serif; }
+    .font-mono { font-family: 'IBM Plex Mono', monospace; }
+    input, textarea, select { font-family: 'Inter', sans-serif; }
+    ::placeholder { color: #7d8a86; }
+  `}</style>
+);
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+function slugForMechanic(name) {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+// Same synthetic-email trick as the work order board — this is what makes
+// a PIN created here also work over there, and vice versa. Nobody ever
+// sees or uses this email; it's just how Firebase identifies the login.
+function emailForMechanic(name) {
+  return `${slugForMechanic(name)}@harder-contracting.app`;
+}
+function stripUndefined(data) {
+  return JSON.parse(JSON.stringify(data));
+}
+
+// ---- Same PIN entry UI as the work order board ----
+function PinModalOverlay({ pinModal, pinInput, setPinInput, pinError, onCancel, onForgot }) {
+  if (!pinModal) return null;
+  const isVerify = pinModal.mode === 'verify';
+  const isConfirm = pinModal.mode === 'setup' && pinModal.stage === 'confirm';
+  const title = isVerify ? 'Enter your PIN' : isConfirm ? 'Confirm your PIN' : 'Create a 6-digit PIN';
+
+  const handleDigit = (d) => { if (pinInput.length < 6) setPinInput(pinInput + d); };
+  const handleBackspace = () => setPinInput(pinInput.slice(0, -1));
+
+  return (
+    <div className="absolute inset-0 z-50 p-6" style={{ background: 'rgba(0,0,0,0.75)', minHeight: '100vh' }}>
+      <div className="w-full max-w-xs mx-auto my-8 rounded-2xl p-6 overflow-y-auto" style={{ background: COLORS.surface, border: `2px solid ${COLORS.line}`, maxHeight: '85vh' }}>
+        <p className="font-display text-lg font-bold text-center mb-1">{title}</p>
+        <p className="text-sm text-center mb-5" style={{ color: COLORS.inkDim }}>{pinModal.mechanic}</p>
+        {pinModal.role && (
+          <p className="text-xs text-center mb-4 font-semibold uppercase tracking-wide" style={{ color: COLORS.accent }}>
+            Role: {pinModal.role}
+          </p>
+        )}
+
+        <div className="flex justify-center gap-3 mb-5">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="w-4 h-4 rounded-full" style={{
+              background: i < pinInput.length ? COLORS.accent : 'transparent',
+              border: `2px solid ${i < pinInput.length ? COLORS.accent : COLORS.line}`,
+            }} />
+          ))}
+        </div>
+
+        {pinError && <p className="text-sm text-center mb-4 font-semibold" style={{ color: '#E07A5F' }}>{pinError}</p>}
+
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+            <button key={d} onClick={() => handleDigit(d)} className="font-display text-2xl font-bold rounded-xl py-4 transition-all active:scale-95" style={{ background: COLORS.surfaceRaised, color: COLORS.ink }}>{d}</button>
+          ))}
+          <button onClick={onCancel} className="font-display text-xs uppercase font-bold rounded-xl py-4 transition-all active:scale-95" style={{ background: 'transparent', color: COLORS.inkDim }}>Cancel</button>
+          <button onClick={() => handleDigit('0')} className="font-display text-2xl font-bold rounded-xl py-4 transition-all active:scale-95" style={{ background: COLORS.surfaceRaised, color: COLORS.ink }}>0</button>
+          <button onClick={handleBackspace} className="font-display text-lg font-bold rounded-xl py-4 transition-all active:scale-95" style={{ background: 'transparent', color: COLORS.inkDim }}>⌫</button>
+        </div>
+
+        {isVerify && (
+          <button onClick={onForgot} className="block w-full text-center text-sm underline" style={{ color: COLORS.inkDim }}>
+            Forgot PIN? Reset it
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Btn({ children, onClick, variant = 'primary', disabled, className = '' }) {
+  const base = 'font-display font-bold uppercase tracking-wide text-base px-6 py-3.5 rounded-xl transition-all focus:outline-none focus:ring-2 cursor-pointer active:scale-95';
+  const styles = {
+    primary: { background: COLORS.accent, color: '#1B1F19', boxShadow: '0 3px 8px rgba(0,0,0,0.35)', border: 'none' },
+    ghost: { background: 'transparent', color: COLORS.ink, border: `2.5px solid ${COLORS.line}`, boxShadow: 'none' },
+  };
+  return (
+    <button onClick={onClick} disabled={disabled} style={{ ...styles[variant], opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto' }} className={`${base} ${className} hover:scale-105`}>
+      {children}
+    </button>
+  );
+}
+
+function App() {
+  const [loading, setLoading] = useState(true);
+  const [mechanics, setMechanics] = useState([]); // SAME shared roster as the work order board (/meta/mechanics)
+  const [admins, setAdmins] = useState([]);        // SAME shared /admins array — read here, and added to on admin invites
+  const [roles, setRoles] = useState({});          // NEW, owned by this app: { [slug]: 'employee'|'foreman'|'admin' }
+  const [firebaseUser, setFirebaseUser] = useState(undefined);
+  const [currentMechanic, setCurrentMechanic] = useState(null);
+  const [screen, setScreen] = useState('login');
+
+  const [pinModal, setPinModal] = useState(null);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+
+  const [inviteTokenState, setInviteTokenState] = useState(null); // { token, name, role } | 'invalid' | null
+
+  // -- admin: generate invite --
+  const [inviteNameDraft, setInviteNameDraft] = useState('');
+  const [inviteRoleDraft, setInviteRoleDraft] = useState('employee');
+  const [generatedInviteLink, setGeneratedInviteLink] = useState(null);
+  const [generatingInvite, setGeneratingInvite] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = firebase.auth().onAuthStateChanged((u) => setFirebaseUser(u));
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const db = firebase.database();
+    const metaRef = db.ref('meta');
+    const adminsRef = db.ref('admins');
+    const rolesRef = db.ref('roles');
+    const ready = { meta: false, admins: false, roles: false };
+    const checkReady = () => { if (ready.meta && ready.admins && ready.roles) setLoading(false); };
+
+    const onMeta = metaRef.on('value', (snap) => {
+      const meta = snap.val() || { mechanics: [] };
+      setMechanics(meta.mechanics || []);
+      ready.meta = true; checkReady();
+    });
+    const onAdmins = adminsRef.on('value', (snap) => {
+      setAdmins(snap.val() || []);
+      ready.admins = true; checkReady();
+    });
+    const onRoles = rolesRef.on('value', (snap) => {
+      setRoles(snap.val() || {});
+      ready.roles = true; checkReady();
+    });
+
+    return () => {
+      metaRef.off('value', onMeta);
+      adminsRef.off('value', onAdmins);
+      rolesRef.off('value', onRoles);
+    };
+  }, []);
+
+  // -- invite link handling (?inviteToken=...) --
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('inviteToken');
+    if (!token) return;
+    (async () => {
+      try {
+        const snap = await firebase.database().ref('inviteTokens/' + token).once('value');
+        const data = snap.val();
+        if (!data || Date.now() > data.expiresAt) {
+          setInviteTokenState('invalid');
+        } else {
+          setInviteTokenState({ token, name: data.name, role: data.role || 'employee' });
+        }
+      } catch (e) {
+        setInviteTokenState('invalid');
+      }
+      window.history.replaceState({}, '', window.location.pathname);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (inviteTokenState && inviteTokenState !== 'invalid') {
+      setPinInput('');
+      setPinError('');
+      setPinModal({ mode: 'setup', mechanic: inviteTokenState.name, role: inviteTokenState.role, stage: 'first', firstEntry: '' });
+    }
+  }, [inviteTokenState]);
+
+  // Role for a given name — falls back sensibly for people who existed
+  // before this app's /roles map did (e.g. anyone already in /admins from
+  // the work order board is treated as admin here too, automatically).
+  const roleFor = (name) => {
+    const slug = slugForMechanic(name);
+    if (roles[slug]) return roles[slug];
+    if (admins.includes(name)) return 'admin';
+    return 'employee';
+  };
+
+  const isAdmin = currentMechanic && roleFor(currentMechanic) === 'admin';
+  const isForeman = currentMechanic && roleFor(currentMechanic) === 'foreman';
+
+  const handleMechanicTap = (name) => {
+    setPinError('');
+    setPinInput('');
+    setPinModal({ mode: 'verify', mechanic: name });
+  };
+
+  const submitPin = async () => {
+    if (!pinModal || pinInput.length !== 6) return;
+
+    if (pinModal.mode === 'verify') {
+      try {
+        await firebase.auth().signInWithEmailAndPassword(emailForMechanic(pinModal.mechanic), pinInput);
+        const mechanic = pinModal.mechanic;
+        localStorage.setItem('deviceMechanic', mechanic);
+        setPinModal(null); setPinInput(''); setPinError('');
+        setCurrentMechanic(mechanic);
+        setScreen('landing');
+      } catch (e) {
+        setPinError('Wrong PIN — try again');
+        setPinInput('');
+      }
+    } else if (pinModal.mode === 'setup') {
+      if (pinModal.stage === 'first') {
+        setPinModal({ ...pinModal, stage: 'confirm', firstEntry: pinInput });
+        setPinInput('');
+      } else {
+        if (pinInput !== pinModal.firstEntry) {
+          setPinError("Those didn't match — start over");
+          setPinModal({ ...pinModal, stage: 'first', firstEntry: '' });
+          setPinInput('');
+          return;
+        }
+        const mechanic = pinModal.mechanic;
+        const role = pinModal.role || 'employee';
+        const email = emailForMechanic(mechanic);
+        try {
+          const cred = await firebase.auth().createUserWithEmailAndPassword(email, pinInput);
+          await firebase.database().ref('users/' + cred.user.uid).set({ name: mechanic, isAdmin: role === 'admin' });
+          await firebase.database().ref('roles/' + slugForMechanic(mechanic)).set(role);
+          if (role === 'admin' && !admins.includes(mechanic)) {
+            await firebase.database().ref('admins').set([...admins, mechanic]);
+          }
+          if (!mechanics.includes(mechanic)) {
+            await firebase.database().ref('meta/mechanics').set([...mechanics, mechanic]);
+          }
+        } catch (e) {
+          setPinError(
+            e.code === 'auth/email-already-in-use'
+              ? 'A login already exists for this name — try entering your PIN instead, or ask an admin for help.'
+              : 'Could not save your PIN. Check your connection and try again.'
+          );
+          setPinModal({ ...pinModal, stage: 'first', firstEntry: '' });
+          setPinInput('');
+          return;
+        }
+        setPinModal(null); setPinInput(''); setPinError('');
+        if (inviteTokenState && inviteTokenState !== 'invalid' && inviteTokenState.name === mechanic) {
+          firebase.database().ref('inviteTokens/' + inviteTokenState.token).remove().catch(() => {});
+          setInviteTokenState(null);
+        }
+        localStorage.setItem('deviceMechanic', mechanic);
+        setCurrentMechanic(mechanic);
+        setScreen('landing');
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (pinModal && pinInput.length === 6) submitPin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinInput]);
+
+  const cancelPinModal = () => { setPinModal(null); setPinInput(''); setPinError(''); };
+  const forgotPin = () => {
+    setPinError('Forgotten your PIN? Ask an admin to reset your login for you.');
+  };
+
+  const generateInvite = async () => {
+    const trimmed = inviteNameDraft.trim();
+    if (!trimmed) return;
+    setGeneratingInvite(true);
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(24))).map((b) => b.toString(16).padStart(2, '0')).join('');
+    await firebase.database().ref('inviteTokens/' + token).set({
+      name: trimmed,
+      role: inviteRoleDraft,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    });
+    setGeneratedInviteLink(`https://certifiedjoes-art.github.io/Timesheets/?inviteToken=${token}`);
+    setGeneratingInvite(false);
+  };
+
+  const logout = async () => {
+    await firebase.auth().signOut().catch(() => {});
+    setCurrentMechanic(null);
+    setScreen('login');
+  };
+
+  if (loading) {
+    return (
+      <div style={{ background: COLORS.bg, color: COLORS.ink, minHeight: '100vh' }} className="flex items-center justify-center font-display">
+        {FONT_STYLE}
+        <span className="text-sm uppercase tracking-widest" style={{ color: COLORS.inkDim }}>Loading…</span>
+      </div>
+    );
+  }
+
+  // ---------- LOGIN ----------
+  if (screen === 'login' || !currentMechanic) {
+    const rememberedName = localStorage.getItem('deviceMechanic');
+    const rememberedStillExists = rememberedName && mechanics.includes(rememberedName);
+
+    return (
+      <div style={{ color: COLORS.ink, minHeight: '100vh' }} className="font-body p-6 flex flex-col items-center justify-center">
+        {FONT_STYLE}
+        <PinModalOverlay pinModal={pinModal} pinInput={pinInput} setPinInput={setPinInput} pinError={pinError} onCancel={cancelPinModal} onForgot={forgotPin} />
+
+        <div className="max-w-md w-full">
+          <div className="text-center mb-10">
+            <p className="font-display text-sm uppercase tracking-[0.3em] mb-2" style={{ color: COLORS.accent }}>Harder Contracting</p>
+            <h1 className="font-display text-4xl font-bold mb-2">Timesheets</h1>
+            <p className="text-base" style={{ color: COLORS.inkDim }}>Same login as the work order board</p>
+          </div>
+
+          {mechanics.length > 0 && (
+            <div className="mb-8">
+              <p className="font-display text-xs uppercase tracking-wider mb-3" style={{ color: COLORS.inkDim }}>
+                {rememberedStillExists ? 'Welcome back' : 'Tap to sign in'}
+              </p>
+              {rememberedStillExists ? (
+                <button onClick={() => handleMechanicTap(rememberedName)} className="w-full rounded-lg px-4 py-6 font-display font-bold text-xl text-center focus:outline-none focus:ring-2 transition-all hover:scale-105 active:scale-95" style={{ background: COLORS.surface, border: `2px solid ${COLORS.accent}`, color: COLORS.ink }}>
+                  {rememberedName}
+                </button>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {mechanics.map((m) => (
+                    <button key={m} onClick={() => handleMechanicTap(m)} className="rounded-lg px-4 py-5 font-medium text-center focus:outline-none focus:ring-2 transition-all hover:scale-105 active:scale-95" style={{ background: COLORS.surface, border: `2px solid ${COLORS.line}`, color: COLORS.ink }}>
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {inviteTokenState === 'invalid' && (
+            <div className="rounded-lg p-5" style={{ background: COLORS.surface, border: `2px dashed #E07A5F` }}>
+              <p className="text-sm" style={{ color: '#E07A5F' }}>That invite link is invalid or has expired. Ask your admin to send you a fresh one.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- POST-LOGIN LANDING (role-based) ----------
+  // This is a placeholder for now — the real shift screen / admin panel
+  // get wired in as the next build step. What matters right now is
+  // proving the login + role routing works correctly end to end.
+  return (
+    <div style={{ background: COLORS.bg, color: COLORS.ink, minHeight: '100vh' }} className="font-body p-6">
+      {FONT_STYLE}
+      <div className="max-w-md mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <p className="font-display text-xs uppercase tracking-[0.3em] mb-1" style={{ color: COLORS.accent }}>Harder Contracting</p>
+            <h1 className="font-display text-2xl font-bold">Signed in</h1>
+          </div>
+          <button onClick={logout} className="text-xs font-display uppercase tracking-wider underline" style={{ color: COLORS.inkDim }}>Log out</button>
+        </div>
+
+        <div className="rounded-lg p-6 mb-6" style={{ background: COLORS.surface, border: `2px solid ${COLORS.accent}` }}>
+          <p className="font-display text-2xl font-bold mb-1">{currentMechanic}</p>
+          <p className="text-sm uppercase tracking-wide font-semibold" style={{ color: COLORS.accent }}>
+            Role: {roleFor(currentMechanic)}
+          </p>
+        </div>
+
+        <div className="rounded-lg p-5 mb-6" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+          <p className="text-sm" style={{ color: COLORS.inkDim }}>
+            {roleFor(currentMechanic) === 'employee' && "You'd land on the shift clock-in screen here — that piece gets wired in next."}
+            {roleFor(currentMechanic) === 'foreman' && "You'd land on the shift screen plus foreman tools (reports, map overlays) — coming next."}
+            {roleFor(currentMechanic) === 'admin' && "You'd land on the shift screen plus the full admin panel — coming next."}
+          </p>
+        </div>
+
+        {(isAdmin || isForeman) && (
+          <div className="rounded-lg p-5" style={{ background: COLORS.surface, border: `2px dashed ${COLORS.accent}` }}>
+            <p className="font-display text-sm uppercase tracking-wide mb-2" style={{ color: COLORS.accent }}>+ Invite someone</p>
+            <p className="text-xs mb-3" style={{ color: COLORS.inkDim }}>
+              This uses the exact same invite system as the work order board — one PIN works on both.
+            </p>
+            <input
+              value={inviteNameDraft}
+              onChange={(e) => setInviteNameDraft(e.target.value)}
+              placeholder="Their name"
+              className="w-full rounded-lg px-4 py-2 text-base mb-2 focus:outline-none focus:ring-2"
+              style={{ background: COLORS.surfaceRaised, color: COLORS.ink, border: `1px solid ${COLORS.line}` }}
+            />
+            <select
+              value={inviteRoleDraft}
+              onChange={(e) => setInviteRoleDraft(e.target.value)}
+              className="w-full rounded-lg px-4 py-2 text-base mb-3 focus:outline-none focus:ring-2"
+              style={{ background: COLORS.surfaceRaised, color: COLORS.ink, border: `1px solid ${COLORS.line}` }}
+            >
+              <option value="employee">Employee</option>
+              <option value="foreman">Foreman</option>
+              {isAdmin && <option value="admin">Admin</option>}
+            </select>
+            <Btn onClick={generateInvite} disabled={!inviteNameDraft.trim() || generatingInvite}>
+              {generatingInvite ? '…' : 'Generate invite link'}
+            </Btn>
+            {generatedInviteLink && (
+              <div className="rounded-lg p-3 mt-3" style={{ background: COLORS.surfaceRaised }}>
+                <p className="text-xs mb-2 break-all font-mono">{generatedInviteLink}</p>
+                <button
+                  onClick={() => {
+                    if (navigator.share) navigator.share({ title: 'Harder Contracting — join the team', url: generatedInviteLink }).catch(() => {});
+                    else navigator.clipboard.writeText(generatedInviteLink).catch(() => {});
+                  }}
+                  className="text-xs font-display uppercase tracking-wider font-semibold px-3 py-2 rounded-lg"
+                  style={{ color: COLORS.accent, background: COLORS.surface, border: `1px solid ${COLORS.line}` }}
+                >
+                  {navigator.share ? 'Share link' : 'Copy link'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+
+</body>
+</html>
