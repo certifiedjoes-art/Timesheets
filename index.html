@@ -320,6 +320,8 @@ function App() {
   const [generatingInvite, setGeneratingInvite] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [blocks, setBlocks] = useState([]);
+  const [machineAssignments, setMachineAssignments] = useState({}); // { [slug]: machineName } — baked into their shift automatically
+  const [inviteMachineDraft, setInviteMachineDraft] = useState(MACHINES[0].name);
   const [shifts, setShifts] = useState([]);
   const [settings, setSettings] = useState({ billingEmail: '' });
   const [newBlockText, setNewBlockText] = useState('');
@@ -371,7 +373,7 @@ function App() {
         if (!data || Date.now() > data.expiresAt) {
           setInviteTokenState('invalid');
         } else {
-          setInviteTokenState({ token, name: data.name, role: data.role || 'employee' });
+          setInviteTokenState({ token, name: data.name, role: data.role || 'employee', machine: data.machine || null });
         }
       } catch (e) {
         setInviteTokenState('invalid');
@@ -384,7 +386,7 @@ function App() {
     if (inviteTokenState && inviteTokenState !== 'invalid') {
       setPinInput('');
       setPinError('');
-      setPinModal({ mode: 'setup', mechanic: inviteTokenState.name, role: inviteTokenState.role, stage: 'first', firstEntry: '' });
+      setPinModal({ mode: 'setup', mechanic: inviteTokenState.name, role: inviteTokenState.role, machine: inviteTokenState.machine, stage: 'first', firstEntry: '' });
     }
   }, [inviteTokenState]);
 
@@ -400,6 +402,14 @@ function App() {
 
   const isAdmin = currentMechanic && roleFor(currentMechanic) === 'admin';
   const isForeman = currentMechanic && roleFor(currentMechanic) === 'foreman';
+
+  // The machine baked into someone's timesheet — set at invite time, changeable
+  // later by an admin. Falls back to the first machine on the list for anyone
+  // who somehow has no assignment yet, so nobody gets stuck unable to clock in.
+  const assignedMachineFor = (name) => machineAssignments[slugForMechanic(name)] || MACHINES[0].name;
+  const setAssignedMachine = async (name, machine) => {
+    await firebase.database().ref('machineAssignments/' + slugForMechanic(name)).set(machine);
+  };
 
   const handleMechanicTap = (name) => {
     setPinError('');
@@ -440,6 +450,9 @@ function App() {
           const cred = await firebase.auth().createUserWithEmailAndPassword(email, pinInput);
           await firebase.database().ref('users/' + cred.user.uid).set({ name: mechanic, isAdmin: role === 'admin' });
           await firebase.database().ref('roles/' + slugForMechanic(mechanic)).set(role);
+          if (pinModal.machine) {
+            await firebase.database().ref('machineAssignments/' + slugForMechanic(mechanic)).set(pinModal.machine);
+          }
           if (role === 'admin' && !admins.includes(mechanic)) {
             await firebase.database().ref('admins').set([...admins, mechanic]);
           }
@@ -486,6 +499,7 @@ function App() {
     await firebase.database().ref('inviteTokens/' + token).set({
       name: trimmed,
       role: inviteRoleDraft,
+      machine: inviteMachineDraft,
       createdAt: Date.now(),
       expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
     });
@@ -497,6 +511,12 @@ function App() {
     const blocksRef = firebase.database().ref('blocks');
     const onBlocks = blocksRef.on('value', (snap) => setBlocks(snap.val() || []));
     return () => blocksRef.off('value', onBlocks);
+  }, []);
+
+  useEffect(() => {
+    const maRef = firebase.database().ref('machineAssignments');
+    const onMa = maRef.on('value', (snap) => setMachineAssignments(snap.val() || {}));
+    return () => maRef.off('value', onMa);
   }, []);
 
   useEffect(() => {
@@ -546,7 +566,7 @@ function App() {
       id: uid(),
       employee: currentMechanic,
       employeeRole: roleFor(currentMechanic),
-      machine: MACHINES[0].name,
+      machine: assignedMachineFor(currentMechanic),
       block: '',
       start: new Date().toISOString(),
       end: null,
@@ -699,9 +719,15 @@ function App() {
               </div>
 
               <Section label="Machine">
-                <Select value={openShift.machine} onChange={(e) => patchOpenShift({ machine: e.target.value })}>
-                  {MACHINES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                </Select>
+                {roleFor(currentMechanic) === 'employee' ? (
+                  <div className="rounded-lg px-4 py-2.5 text-base font-semibold" style={{ background: COLORS.surfaceRaised, color: COLORS.ink, border: `1px solid ${COLORS.line}` }}>
+                    🚜 {openShift.machine}
+                  </div>
+                ) : (
+                  <Select value={openShift.machine} onChange={(e) => patchOpenShift({ machine: e.target.value })}>
+                    {MACHINES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                  </Select>
+                )}
               </Section>
 
               {activeType !== 'fuel' && (
@@ -821,24 +847,80 @@ function App() {
             <button onClick={() => setShowSidebar(true)} className="text-3xl leading-none px-3 py-2 rounded-lg" style={{ color: COLORS.accent, background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>☰</button>
           </div>
 
+          <Section label="Clocked in right now">
+            {shifts.filter((s) => !s.end).length === 0 ? (
+              <p className="text-sm" style={{ color: COLORS.inkDim }}>Nobody's clocked in at the moment.</p>
+            ) : (
+              <div className="space-y-2">
+                {shifts.filter((s) => !s.end).map((s) => (
+                  <div key={s.id} className="rounded-lg p-3 flex items-center justify-between" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+                    <span className="font-semibold text-sm">🟢 {s.employee}</span>
+                    <span className="text-xs font-mono" style={{ color: COLORS.inkDim }}>{s.machine} · since {fmtTime(s.start)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+
+          <Section label="Recent shifts">
+            {shifts.filter((s) => s.end).length === 0 ? (
+              <p className="text-sm" style={{ color: COLORS.inkDim }}>No completed shifts yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {shifts.filter((s) => s.end).sort((a, b) => b.end.localeCompare(a.end)).slice(0, 20).map((s) => (
+                  <div key={s.id} className="rounded-lg p-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-sm">{s.employee}</span>
+                      <span className="text-xs" style={{ color: COLORS.inkDim }}>{fmtDate(s.end)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                      <span>{s.machine}{s.block ? ` · Block ${s.block}` : ''}</span>
+                      <span className="font-mono" style={{ color: COLORS.accent }}>{productionSummary(s)}</span>
+                    </div>
+                    {s.extraTasks && s.extraTasks.length > 0 && (
+                      <p className="text-xs mt-1" style={{ color: COLORS.inkDim }}>+ {s.extraTasks.length} extra task{s.extraTasks.length > 1 ? 's' : ''}</p>
+                    )}
+                    {s.downtimeLog && s.downtimeLog.length > 0 && (
+                      <p className="text-xs mt-1" style={{ color: '#E07A5F' }}>⚠ {s.downtimeLog.length} downtime report{s.downtimeLog.length > 1 ? 's' : ''}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+
           <Section label="Employees">
             <div className="space-y-2 mb-3">
               {mechanics.map((m) => (
-                <div key={m} className="rounded-lg p-3 flex items-center justify-between" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
-                  <span className="text-sm font-semibold">{m}</span>
+                <div key={m} className="rounded-lg p-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold">{m}</span>
+                    {isAdmin ? (
+                      <select
+                        value={roleFor(m)}
+                        onChange={(e) => setRoleFor(m, e.target.value)}
+                        className="text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2"
+                        style={{ background: COLORS.surfaceRaised, color: COLORS.ink, border: `1px solid ${COLORS.line}` }}
+                      >
+                        <option value="employee">Employee</option>
+                        <option value="foreman">Foreman</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    ) : (
+                      <span className="text-xs uppercase tracking-wide" style={{ color: COLORS.accent }}>{roleFor(m)}</span>
+                    )}
+                  </div>
                   {isAdmin ? (
                     <select
-                      value={roleFor(m)}
-                      onChange={(e) => setRoleFor(m, e.target.value)}
-                      className="text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2"
-                      style={{ background: COLORS.surfaceRaised, color: COLORS.ink, border: `1px solid ${COLORS.line}` }}
+                      value={assignedMachineFor(m)}
+                      onChange={(e) => setAssignedMachine(m, e.target.value)}
+                      className="text-xs rounded-lg px-2 py-1.5 w-full focus:outline-none focus:ring-2"
+                      style={{ background: COLORS.surfaceRaised, color: COLORS.inkDim, border: `1px solid ${COLORS.line}` }}
                     >
-                      <option value="employee">Employee</option>
-                      <option value="foreman">Foreman</option>
-                      <option value="admin">Admin</option>
+                      {MACHINES.map((mc) => <option key={mc.name} value={mc.name}>{mc.name}</option>)}
                     </select>
                   ) : (
-                    <span className="text-xs uppercase tracking-wide" style={{ color: COLORS.accent }}>{roleFor(m)}</span>
+                    <span className="text-xs" style={{ color: COLORS.inkDim }}>🚜 {assignedMachineFor(m)}</span>
                   )}
                 </div>
               ))}
@@ -850,6 +932,12 @@ function App() {
                 <option value="foreman">Foreman</option>
                 {isAdmin && <option value="admin">Admin</option>}
               </Select>
+            </div>
+            <div className="mb-2">
+              <Select value={inviteMachineDraft} onChange={(e) => setInviteMachineDraft(e.target.value)}>
+                {MACHINES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+              </Select>
+              <p className="text-xs mt-1" style={{ color: COLORS.inkDim }}>Which machine this person runs — baked into their timesheet automatically.</p>
             </div>
             <Btn onClick={generateInvite} disabled={!inviteNameDraft.trim() || generatingInvite}>{generatingInvite ? '…' : 'Generate invite link'}</Btn>
             {generatedInviteLink && (
@@ -895,6 +983,28 @@ function App() {
   }
 
   return null;
+}
+
+function productionSummary(s) {
+  const type = machineType(s.machine);
+  if (type === 'buncher') return s.trees ? `${s.trees} trees` : '—';
+  if (type === 'skidder' || type === 'processor') {
+    const parts = [];
+    if (s.spruce) parts.push(`${s.spruce} spruce`);
+    if (s.aspen) parts.push(`${s.aspen} aspen`);
+    return parts.length ? parts.join(', ') : '—';
+  }
+  if (type === 'loader') {
+    const parts = [];
+    if (s.loadCount) parts.push(`${s.loadCount} loads`);
+    if (s.topPileCount) parts.push(`${s.topPileCount} top piles`);
+    return parts.length ? parts.join(', ') : '—';
+  }
+  if (type === 'fuel') {
+    const total = Object.values(s.fuelLog || {}).flat().reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
+    return total > 0 ? `${total} L delivered` : '—';
+  }
+  return '—';
 }
 
 function ExtraTasksEditor({ shift, onAdd, onRemove }) {
