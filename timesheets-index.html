@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Harder Contracting — Timesheets</title>
+
+<meta name="theme-color" content="#1B1F19" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Timesheets" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<script>
+  window.__loadStatus = {};
+</script>
+
+<script src="https://cdn.tailwindcss.com" onload="window.__loadStatus['tailwind']='ok'" onerror="window.__loadStatus['tailwind']='FAILED'"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" onload="window.__loadStatus['react']='ok'" onerror="window.__loadStatus['react']='FAILED'"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" onload="window.__loadStatus['react-dom']='ok'" onerror="window.__loadStatus['react-dom']='FAILED'"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js" onload="window.__loadStatus['babel']='ok'" onerror="window.__loadStatus['babel']='FAILED'"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" onload="window.__loadStatus['firebase-app']='ok'" onerror="window.__loadStatus['firebase-app']='FAILED'"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" onload="window.__loadStatus['firebase-db']='ok'" onerror="window.__loadStatus['firebase-db']='FAILED'"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" onload="window.__loadStatus['firebase-auth']='ok'" onerror="window.__loadStatus['firebase-auth']='FAILED'"></script>
+
+<style>
+  html, body {
+    background: #1B1F19;
+    background: radial-gradient(ellipse 120% 80% at 50% -10%, #232D20 0%, #1B1F19 55%);
+    margin: 0; padding: 0;
+  }
+  #root { min-height: 100vh; }
+  #root {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<!-- Same on-screen fatal-error reporting as the work order board, so a
+     broken load shows a real message instead of a blank screen. -->
+<script>
+  window.addEventListener('error', function (e) {
+    const root = document.getElementById('root');
+    if (root.children.length > 0) return;
+    showFatalError((e.message || 'Script failed to load') + (e.filename ? '\n\nFile: ' + e.filename + (e.lineno ? ':' + e.lineno : '') : ''));
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    const root = document.getElementById('root');
+    if (root.children.length > 0) return;
+    showFatalError('Unhandled error: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+  });
+  function showFatalError(msg) {
+    const root = document.getElementById('root');
+    if (root.dataset.errorShown) return;
+    root.dataset.errorShown = '1';
+    const status = window.__loadStatus || {};
+    const lines = ['tailwind', 'react', 'react-dom', 'babel', 'firebase-app', 'firebase-db', 'firebase-auth'].map(function (k) {
+      return k + ': ' + (status[k] || 'never finished loading');
+    });
+    root.innerHTML =
+      '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;font-family:sans-serif;color:#ECE8DF;background:#1B1E20;text-align:center;">' +
+      '<div style="max-width:520px;"><h1 style="color:#E8622C;font-size:1.4rem;">Something went wrong loading the app</h1>' +
+      '<p style="margin-top:1rem;">This can happen on a fresh launch with a weak signal. Try again first:</p>' +
+      '<button onclick="window.location.reload()" style="margin-top:1rem;padding:0.75rem 1.5rem;font-size:1rem;font-weight:bold;background:#7FA37E;color:#1B1F19;border:none;border-radius:8px;cursor:pointer;">Try again</button>' +
+      '<p style="margin-top:1.5rem;">If it keeps happening, screenshot this and send it back:</p>' +
+      '<pre style="text-align:left;background:#242829;padding:1rem;border-radius:8px;overflow:auto;font-size:0.75rem;white-space:pre-wrap;">' +
+      String(msg).replace(/</g, '&lt;') + '\n\n' + lines.join('\n') + '</pre></div></div>';
+  }
+  setTimeout(function () {
+    const root = document.getElementById('root');
+    if (root.dataset.errorShown) return;
+    if (root.children.length > 0) return;
+    const status = window.__loadStatus || {};
+    const lines = ['tailwind', 'react', 'react-dom', 'babel', 'firebase-app', 'firebase-db', 'firebase-auth'].map(function (k) {
+      return k + ': ' + (status[k] || 'never finished loading');
+    });
+    showFatalError('The app never finished starting up. Here is what loaded:\n\n' + lines.join('\n'));
+  }, 6000);
+</script>
+
+<!-- Same Firebase project as the work order board — this is intentional,
+     it's what makes one PIN work across both apps. -->
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyAcKWZYgawRHLBIqbUWPPYHmP812_4gODI",
+    authDomain: "harder-contracting.firebaseapp.com",
+    databaseURL: "https://harder-contracting-default-rtdb.firebaseio.com",
+    projectId: "harder-contracting",
+    storageBucket: "harder-contracting.firebasestorage.app",
+    messagingSenderId: "337605513419",
+    appId: "1:337605513419:web:f599c3a5fa57f005ed4b4e"
+  };
+  firebase.initializeApp(firebaseConfig);
+</script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+// ---- Same visual identity as the work order board ----
+const COLORS = {
+  bg: '#1B1F19',
+  surface: '#242A22',
+  surfaceRaised: '#2E362C',
+  ink: '#F0EFE6',
+  inkDim: '#9BAA95',
+  line: '#3A4436',
+  accent: '#7FA37E',
+  accentDim: '#5C7D5D',
+  manila: '#D9D4B4',
+  ink2: '#262B21',
+};
+
+const FONT_STYLE = (
+  <style>{`
+    * { box-sizing: border-box; }
+    .font-display { font-family: 'Rajdhani', sans-serif; }
+    .font-body { font-family: 'Inter', sans-serif; }
+    .font-mono { font-family: 'IBM Plex Mono', monospace; }
+    input, textarea, select { font-family: 'Inter', sans-serif; }
+    ::placeholder { color: #7d8a86; }
+  `}</style>
+);
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+function slugForMechanic(name) {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+// Same synthetic-email trick as the work order board — this is what makes
+// a PIN created here also work over there, and vice versa. Nobody ever
+// sees or uses this email; it's just how Firebase identifies the login.
+function emailForMechanic(name) {
+  return `${slugForMechanic(name)}@harder-contracting.app`;
+}
+function stripUndefined(data) {
+  return JSON.parse(JSON.stringify(data));
+}
+
+// ---- Same PIN entry UI as the work order board ----
+function PinModalOverlay({ pinModal, pinInput, setPinInput, pinError, onCancel, onForgot }) {
+  if (!pinModal) return null;
+  const isVerify = pinModal.mode === 'verify';
+  const isConfirm = pinModal.mode === 'setup' && pinModal.stage === 'confirm';
+  const title = isVerify ? 'Enter your PIN' : isConfirm ? 'Confirm your PIN' : 'Create a 6-digit PIN';
+
+  const handleDigit = (d) => { if (pinInput.length < 6) setPinInput(pinInput + d); };
+  const handleBackspace = () => setPinInput(pinInput.slice(0, -1));
+
+  return (
+    <div className="absolute inset-0 z-50 p-6" style={{ background: 'rgba(0,0,0,0.75)', minHeight: '100vh' }}>
+      <div className="w-full max-w-xs mx-auto my-8 rounded-2xl p-6 overflow-y-auto" style={{ background: COLORS.surface, border: `2px solid ${COLORS.line}`, maxHeight: '85vh' }}>
+        <p className="font-display text-lg font-bold text-center mb-1">{title}</p>
+        <p className="text-sm text-center mb-5" style={{ color: COLORS.inkDim }}>{pinModal.mechanic}</p>
+        {pinModal.role && (
+          <p className="text-xs text-center mb-4 font-semibold uppercase tracking-wide" style={{ color: COLORS.accent }}>
+            Role: {pinModal.role}
+          </p>
+        )}
+
+        <div className="flex justify-center gap-3 mb-5">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="w-4 h-4 rounded-full" style={{
+              background: i < pinInput.length ? COLORS.accent : 'transparent',
+              border: `2px solid ${i < pinInput.length ? COLORS.accent : COLORS.line}`,
+            }} />
+          ))}
+        </div>
+
+        {pinError && <p className="text-sm text-center mb-4 font-semibold" style={{ color: '#E07A5F' }}>{pinError}</p>}
+
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+            <button key={d} onClick={() => handleDigit(d)} className="font-display text-2xl font-bold rounded-xl py-4 transition-all active:scale-95" style={{ background: COLORS.surfaceRaised, color: COLORS.ink }}>{d}</button>
+          ))}
+          <button onClick={onCancel} className="font-display text-xs uppercase font-bold rounded-xl py-4 transition-all active:scale-95" style={{ background: 'transparent', color: COLORS.inkDim }}>Cancel</button>
+          <button onClick={() => handleDigit('0')} className="font-display text-2xl font-bold rounded-xl py-4 transition-all active:scale-95" style={{ background: COLORS.surfaceRaised, color: COLORS.ink }}>0</button>
+          <button onClick={handleBackspace} className="font-display text-lg font-bold rounded-xl py-4 transition-all active:scale-95" style={{ background: 'transparent', color: COLORS.inkDim }}>⌫</button>
+        </div>
+
+        {isVerify && (
+          <button onClick={onForgot} className="block w-full text-center text-sm underline" style={{ color: COLORS.inkDim }}>
+            Forgot PIN? Reset it
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Btn({ children, onClick, variant = 'primary', disabled, className = '' }) {
+  const base = 'font-display font-bold uppercase tracking-wide text-base px-6 py-3.5 rounded-xl transition-all focus:outline-none focus:ring-2 cursor-pointer active:scale-95';
+  const styles = {
+    primary: { background: COLORS.accent, color: '#1B1F19', boxShadow: '0 3px 8px rgba(0,0,0,0.35)', border: 'none' },
+    ghost: { background: 'transparent', color: COLORS.ink, border: `2.5px solid ${COLORS.line}`, boxShadow: 'none' },
+  };
+  return (
+    <button onClick={onClick} disabled={disabled} style={{ ...styles[variant], opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto' }} className={`${base} ${className} hover:scale-105`}>
+      {children}
+    </button>
+  );
+}
+
+const MACHINES = [
+  { name: 'Feller Buncher 3', type: 'buncher' },
+  { name: 'Processor 1', type: 'processor' },
+  { name: 'Processor 2', type: 'processor' },
+  { name: 'Skidder 4', type: 'skidder' },
+  { name: 'Skidder 5', type: 'skidder' },
+  { name: 'Log Loader 2', type: 'loader' },
+  { name: 'Crawler 1', type: 'crawler' },
+  { name: 'Grader 1', type: 'grader' },
+  { name: 'Fuel Truck 1', type: 'fuel' },
+];
+function machineType(name) {
+  return (MACHINES.find((m) => m.name === name) || {}).type;
+}
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function TextInput(props) {
+  return (
+    <input
+      {...props}
+      className={`w-full rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 ${props.className || ''}`}
+      style={{ background: COLORS.surfaceRaised, color: COLORS.ink, border: `1px solid ${COLORS.line}`, ...(props.style || {}) }}
+    />
+  );
+}
+function Select(props) {
+  return (
+    <select
+      {...props}
+      className={`w-full rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 ${props.className || ''}`}
+      style={{ background: COLORS.surfaceRaised, color: COLORS.ink, border: `1px solid ${COLORS.line}`, ...(props.style || {}) }}
+    >
+      {props.children}
+    </select>
+  );
+}
+function Section({ label, children }) {
+  return (
+    <div className="mb-5">
+      <p className="font-display text-xs uppercase tracking-wider mb-2" style={{ color: COLORS.inkDim }}>{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function SidebarMenu({ show, onClose, mechanic, role, onNavigate, onLogout }) {
+  if (!show) return null;
+  const item = (label, onClick) => (
+    <button
+      onClick={() => { onClick(); onClose(); }}
+      className="w-full text-left px-4 py-3.5 rounded-lg font-display font-semibold text-sm uppercase tracking-wide"
+      style={{ color: COLORS.ink, background: COLORS.surface }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <React.Fragment>
+      <div onClick={onClose} className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.6)' }} />
+      <div className="fixed top-0 left-0 h-full z-50 overflow-y-auto p-5" style={{ width: '85vw', maxWidth: 320, background: COLORS.bg, borderRight: `2px solid ${COLORS.line}` }}>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <p className="font-display text-xs uppercase tracking-[0.3em]" style={{ color: COLORS.accent }}>Harder Contracting</p>
+            <p className="font-display text-xl font-bold mt-1">👤 {mechanic}</p>
+            <p className="text-xs uppercase tracking-wide" style={{ color: COLORS.accent }}>{role}</p>
+          </div>
+          <button onClick={onClose} className="text-2xl leading-none" style={{ color: COLORS.inkDim }}>✕</button>
+        </div>
+        <div className="space-y-1 mb-4">
+          {item('⏱️ Shift', () => onNavigate('shift'))}
+          {(role === 'admin' || role === 'foreman') && item('⚙️ Admin', () => onNavigate('admin'))}
+        </div>
+        <div className="h-px my-4" style={{ background: COLORS.line }} />
+        {item('🚪 Log out', onLogout)}
+      </div>
+    </React.Fragment>
+  );
+}
+
+function App() {
+  const [loading, setLoading] = useState(true);
+  const [mechanics, setMechanics] = useState([]); // SAME shared roster as the work order board (/meta/mechanics)
+  const [admins, setAdmins] = useState([]);        // SAME shared /admins array — read here, and added to on admin invites
+  const [roles, setRoles] = useState({});          // NEW, owned by this app: { [slug]: 'employee'|'foreman'|'admin' }
+  const [firebaseUser, setFirebaseUser] = useState(undefined);
+  const [currentMechanic, setCurrentMechanic] = useState(null);
+  const [screen, setScreen] = useState('login');
+
+  const [pinModal, setPinModal] = useState(null);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+
+  const [inviteTokenState, setInviteTokenState] = useState(null); // { token, name, role } | 'invalid' | null
+
+  // -- admin: generate invite --
+  const [inviteNameDraft, setInviteNameDraft] = useState('');
+  const [inviteRoleDraft, setInviteRoleDraft] = useState('employee');
+  const [generatedInviteLink, setGeneratedInviteLink] = useState(null);
+  const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [blocks, setBlocks] = useState([]);
+  const [shifts, setShifts] = useState([]);
+  const [settings, setSettings] = useState({ billingEmail: '' });
+  const [newBlockText, setNewBlockText] = useState('');
+  const [newEmployeeName, setNewEmployeeName] = useState('');
+
+  useEffect(() => {
+    const unsubscribe = firebase.auth().onAuthStateChanged((u) => setFirebaseUser(u));
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const db = firebase.database();
+    const metaRef = db.ref('meta');
+    const adminsRef = db.ref('admins');
+    const rolesRef = db.ref('roles');
+    const ready = { meta: false, admins: false, roles: false };
+    const checkReady = () => { if (ready.meta && ready.admins && ready.roles) setLoading(false); };
+
+    const onMeta = metaRef.on('value', (snap) => {
+      const meta = snap.val() || { mechanics: [] };
+      setMechanics(meta.mechanics || []);
+      ready.meta = true; checkReady();
+    });
+    const onAdmins = adminsRef.on('value', (snap) => {
+      setAdmins(snap.val() || []);
+      ready.admins = true; checkReady();
+    });
+    const onRoles = rolesRef.on('value', (snap) => {
+      setRoles(snap.val() || {});
+      ready.roles = true; checkReady();
+    });
+
+    return () => {
+      metaRef.off('value', onMeta);
+      adminsRef.off('value', onAdmins);
+      rolesRef.off('value', onRoles);
+    };
+  }, []);
+
+  // -- invite link handling (?inviteToken=...) --
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('inviteToken');
+    if (!token) return;
+    (async () => {
+      try {
+        const snap = await firebase.database().ref('inviteTokens/' + token).once('value');
+        const data = snap.val();
+        if (!data || Date.now() > data.expiresAt) {
+          setInviteTokenState('invalid');
+        } else {
+          setInviteTokenState({ token, name: data.name, role: data.role || 'employee' });
+        }
+      } catch (e) {
+        setInviteTokenState('invalid');
+      }
+      window.history.replaceState({}, '', window.location.pathname);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (inviteTokenState && inviteTokenState !== 'invalid') {
+      setPinInput('');
+      setPinError('');
+      setPinModal({ mode: 'setup', mechanic: inviteTokenState.name, role: inviteTokenState.role, stage: 'first', firstEntry: '' });
+    }
+  }, [inviteTokenState]);
+
+  // Role for a given name — falls back sensibly for people who existed
+  // before this app's /roles map did (e.g. anyone already in /admins from
+  // the work order board is treated as admin here too, automatically).
+  const roleFor = (name) => {
+    const slug = slugForMechanic(name);
+    if (roles[slug]) return roles[slug];
+    if (admins.includes(name)) return 'admin';
+    return 'employee';
+  };
+
+  const isAdmin = currentMechanic && roleFor(currentMechanic) === 'admin';
+  const isForeman = currentMechanic && roleFor(currentMechanic) === 'foreman';
+
+  const handleMechanicTap = (name) => {
+    setPinError('');
+    setPinInput('');
+    setPinModal({ mode: 'verify', mechanic: name });
+  };
+
+  const submitPin = async () => {
+    if (!pinModal || pinInput.length !== 6) return;
+
+    if (pinModal.mode === 'verify') {
+      try {
+        await firebase.auth().signInWithEmailAndPassword(emailForMechanic(pinModal.mechanic), pinInput);
+        const mechanic = pinModal.mechanic;
+        localStorage.setItem('deviceMechanic', mechanic);
+        setPinModal(null); setPinInput(''); setPinError('');
+        setCurrentMechanic(mechanic);
+        setScreen('shift');
+      } catch (e) {
+        setPinError('Wrong PIN — try again');
+        setPinInput('');
+      }
+    } else if (pinModal.mode === 'setup') {
+      if (pinModal.stage === 'first') {
+        setPinModal({ ...pinModal, stage: 'confirm', firstEntry: pinInput });
+        setPinInput('');
+      } else {
+        if (pinInput !== pinModal.firstEntry) {
+          setPinError("Those didn't match — start over");
+          setPinModal({ ...pinModal, stage: 'first', firstEntry: '' });
+          setPinInput('');
+          return;
+        }
+        const mechanic = pinModal.mechanic;
+        const role = pinModal.role || 'employee';
+        const email = emailForMechanic(mechanic);
+        try {
+          const cred = await firebase.auth().createUserWithEmailAndPassword(email, pinInput);
+          await firebase.database().ref('users/' + cred.user.uid).set({ name: mechanic, isAdmin: role === 'admin' });
+          await firebase.database().ref('roles/' + slugForMechanic(mechanic)).set(role);
+          if (role === 'admin' && !admins.includes(mechanic)) {
+            await firebase.database().ref('admins').set([...admins, mechanic]);
+          }
+          if (!mechanics.includes(mechanic)) {
+            await firebase.database().ref('meta/mechanics').set([...mechanics, mechanic]);
+          }
+        } catch (e) {
+          setPinError(
+            e.code === 'auth/email-already-in-use'
+              ? 'A login already exists for this name — try entering your PIN instead, or ask an admin for help.'
+              : 'Could not save your PIN. Check your connection and try again.'
+          );
+          setPinModal({ ...pinModal, stage: 'first', firstEntry: '' });
+          setPinInput('');
+          return;
+        }
+        setPinModal(null); setPinInput(''); setPinError('');
+        if (inviteTokenState && inviteTokenState !== 'invalid' && inviteTokenState.name === mechanic) {
+          firebase.database().ref('inviteTokens/' + inviteTokenState.token).remove().catch(() => {});
+          setInviteTokenState(null);
+        }
+        localStorage.setItem('deviceMechanic', mechanic);
+        setCurrentMechanic(mechanic);
+        setScreen('shift');
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (pinModal && pinInput.length === 6) submitPin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinInput]);
+
+  const cancelPinModal = () => { setPinModal(null); setPinInput(''); setPinError(''); };
+  const forgotPin = () => {
+    setPinError('Forgotten your PIN? Ask an admin to reset your login for you.');
+  };
+
+  const generateInvite = async () => {
+    const trimmed = inviteNameDraft.trim();
+    if (!trimmed) return;
+    setGeneratingInvite(true);
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(24))).map((b) => b.toString(16).padStart(2, '0')).join('');
+    await firebase.database().ref('inviteTokens/' + token).set({
+      name: trimmed,
+      role: inviteRoleDraft,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    });
+    setGeneratedInviteLink(`https://certifiedjoes-art.github.io/Timesheets/?inviteToken=${token}`);
+    setGeneratingInvite(false);
+  };
+
+  useEffect(() => {
+    const blocksRef = firebase.database().ref('blocks');
+    const onBlocks = blocksRef.on('value', (snap) => setBlocks(snap.val() || []));
+    return () => blocksRef.off('value', onBlocks);
+  }, []);
+
+  useEffect(() => {
+    const shiftsRef = firebase.database().ref('productionShifts');
+    const onShifts = shiftsRef.on('value', (snap) => setShifts(snap.val() || []));
+    return () => shiftsRef.off('value', onShifts);
+  }, []);
+
+  useEffect(() => {
+    const settingsRef = firebase.database().ref('productionTimesheetSettings');
+    const onSettings = settingsRef.on('value', (snap) => setSettings(snap.val() || { billingEmail: '' }));
+    return () => settingsRef.off('value', onSettings);
+  }, []);
+
+  const persistShifts = async (next) => {
+    setShifts(next);
+    try {
+      await firebase.database().ref('productionShifts').set(stripUndefined(next));
+    } catch (e) {
+      try {
+        await new Promise((r) => setTimeout(r, 1500));
+        await firebase.database().ref('productionShifts').set(stripUndefined(next));
+      } catch (e2) {
+        alert("Couldn't save — check your signal and try again. This action was NOT recorded.");
+      }
+    }
+  };
+  const persistBlocks = async (next) => {
+    setBlocks(next);
+    await firebase.database().ref('blocks').set(next).catch(() => alert("Couldn't save — check your signal."));
+  };
+  const persistSettings = async (next) => {
+    setSettings(next);
+    await firebase.database().ref('productionTimesheetSettings').set(next).catch(() => alert("Couldn't save — check your signal."));
+  };
+  const setRoleFor = async (name, role) => {
+    await firebase.database().ref('roles/' + slugForMechanic(name)).set(role);
+    if (role === 'admin' && !admins.includes(name)) {
+      await firebase.database().ref('admins').set([...admins, name]);
+    }
+  };
+
+  const openShift = shifts.find((s) => s.employee === currentMechanic && !s.end);
+
+  const startShift = async () => {
+    const entry = {
+      id: uid(),
+      employee: currentMechanic,
+      employeeRole: roleFor(currentMechanic),
+      machine: MACHINES[0].name,
+      block: '',
+      start: new Date().toISOString(),
+      end: null,
+      startHours: '',
+      endHours: '',
+      spruce: '',
+      aspen: '',
+      trees: '',
+      loadCount: '',
+      topPileCount: '',
+      fuelLog: {},
+      extraTasks: [],
+      notes: '',
+      downtimeLog: [],
+    };
+    await persistShifts([...shifts, entry]);
+  };
+
+  const patchOpenShift = async (patch) => {
+    if (!openShift) return;
+    const next = shifts.map((s) => (s.id === openShift.id ? { ...s, ...patch } : s));
+    setShifts(next); // instant UI feedback; full save follows
+    await persistShifts(next);
+  };
+
+  const endShift = async () => {
+    if (!openShift) return;
+    if (machineType(openShift.machine) !== 'fuel' && !openShift.block) {
+      alert('Select or add a block number before clocking out.');
+      return;
+    }
+    await patchOpenShift({ end: new Date().toISOString() });
+  };
+
+  const addExtraTask = async (desc, hours) => {
+    if (!openShift || !desc.trim() || !parseFloat(hours)) return;
+    const next = [...openShift.extraTasks, { id: uid(), desc: desc.trim(), hours: parseFloat(hours) }];
+    await patchOpenShift({ extraTasks: next });
+  };
+  const removeExtraTask = async (taskId) => {
+    if (!openShift) return;
+    await patchOpenShift({ extraTasks: openShift.extraTasks.filter((t) => t.id !== taskId) });
+  };
+
+  const logDowntime = async (reason) => {
+    if (!openShift || !reason.trim()) return;
+    const entry = { id: uid(), reason: reason.trim(), ts: new Date().toISOString() };
+    await patchOpenShift({ downtimeLog: [...(openShift.downtimeLog || []), entry] });
+    // Push notification to mechanics/supervisors and photo attachment are
+    // planned but need Cloud Messaging + Storage wired first — this logs
+    // the report for real right now, the alert delivery comes next.
+  };
+
+  const addBlock = async (name) => {
+    const trimmed = name.trim();
+    if (!trimmed || blocks.includes(trimmed)) return;
+    await persistBlocks([...blocks, trimmed]);
+  };
+  const logout = async () => {
+    await firebase.auth().signOut().catch(() => {});
+    setCurrentMechanic(null);
+    setScreen('login');
+  };
+
+  if (loading) {
+    return (
+      <div style={{ background: COLORS.bg, color: COLORS.ink, minHeight: '100vh' }} className="flex items-center justify-center font-display">
+        {FONT_STYLE}
+        <span className="text-sm uppercase tracking-widest" style={{ color: COLORS.inkDim }}>Loading…</span>
+      </div>
+    );
+  }
+
+  // ---------- LOGIN ----------
+  if (screen === 'login' || !currentMechanic) {
+    const rememberedName = localStorage.getItem('deviceMechanic');
+    const rememberedStillExists = rememberedName && mechanics.includes(rememberedName);
+
+    return (
+      <div style={{ color: COLORS.ink, minHeight: '100vh' }} className="font-body p-6 flex flex-col items-center justify-center">
+        {FONT_STYLE}
+        <PinModalOverlay pinModal={pinModal} pinInput={pinInput} setPinInput={setPinInput} pinError={pinError} onCancel={cancelPinModal} onForgot={forgotPin} />
+
+        <div className="max-w-md w-full">
+          <div className="text-center mb-10">
+            <p className="font-display text-sm uppercase tracking-[0.3em] mb-2" style={{ color: COLORS.accent }}>Harder Contracting</p>
+            <h1 className="font-display text-4xl font-bold mb-2">Timesheets</h1>
+            <p className="text-base" style={{ color: COLORS.inkDim }}>Same login as the work order board</p>
+          </div>
+
+          {mechanics.length > 0 && (
+            <div className="mb-8">
+              <p className="font-display text-xs uppercase tracking-wider mb-3" style={{ color: COLORS.inkDim }}>
+                {rememberedStillExists ? 'Welcome back' : 'Tap to sign in'}
+              </p>
+              {rememberedStillExists ? (
+                <button onClick={() => handleMechanicTap(rememberedName)} className="w-full rounded-lg px-4 py-6 font-display font-bold text-xl text-center focus:outline-none focus:ring-2 transition-all hover:scale-105 active:scale-95" style={{ background: COLORS.surface, border: `2px solid ${COLORS.accent}`, color: COLORS.ink }}>
+                  {rememberedName}
+                </button>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {mechanics.map((m) => (
+                    <button key={m} onClick={() => handleMechanicTap(m)} className="rounded-lg px-4 py-5 font-medium text-center focus:outline-none focus:ring-2 transition-all hover:scale-105 active:scale-95" style={{ background: COLORS.surface, border: `2px solid ${COLORS.line}`, color: COLORS.ink }}>
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {inviteTokenState === 'invalid' && (
+            <div className="rounded-lg p-5" style={{ background: COLORS.surface, border: `2px dashed #E07A5F` }}>
+              <p className="text-sm" style={{ color: '#E07A5F' }}>That invite link is invalid or has expired. Ask your admin to send you a fresh one.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- SHIFT SCREEN ----------
+  if (screen === 'shift' || (screen !== 'admin' && screen !== 'login')) {
+    const activeType = openShift ? machineType(openShift.machine) : null;
+    return (
+      <div style={{ background: COLORS.bg, color: COLORS.ink, minHeight: '100vh' }} className="font-body p-5 sm:p-8">
+        {FONT_STYLE}
+        <SidebarMenu show={showSidebar} onClose={() => setShowSidebar(false)} mechanic={currentMechanic} role={roleFor(currentMechanic)} onNavigate={setScreen} onLogout={logout} />
+        <div className="max-w-lg mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <p className="font-display text-xs uppercase tracking-[0.3em] mb-1" style={{ color: COLORS.accent }}>Harder Contracting</p>
+              <h1 className="font-display text-2xl font-bold">Shift</h1>
+            </div>
+            <button onClick={() => setShowSidebar(true)} className="text-3xl leading-none px-3 py-2 rounded-lg" style={{ color: COLORS.accent, background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>☰</button>
+          </div>
+
+          {!openShift ? (
+            <div className="rounded-lg p-8 text-center" style={{ background: COLORS.surface, border: `2px solid ${COLORS.line}` }}>
+              <p className="text-base mb-5" style={{ color: COLORS.inkDim }}>Not clocked in</p>
+              <Btn onClick={startShift}>Clock In</Btn>
+            </div>
+          ) : (
+            <React.Fragment>
+              <div className="rounded-lg p-4 mb-5 flex items-center justify-between" style={{ background: COLORS.surface, border: `2px solid ${COLORS.accent}` }}>
+                <div>
+                  <p className="text-xs uppercase tracking-wide" style={{ color: COLORS.inkDim }}>On shift since</p>
+                  <p className="font-display text-lg font-bold">{fmtTime(openShift.start)}</p>
+                </div>
+              </div>
+
+              <Section label="Machine">
+                <Select value={openShift.machine} onChange={(e) => patchOpenShift({ machine: e.target.value })}>
+                  {MACHINES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                </Select>
+              </Section>
+
+              {activeType !== 'fuel' && (
+                <Section label="Block number">
+                  <div className="flex gap-2">
+                    <Select value={openShift.block} onChange={(e) => patchOpenShift({ block: e.target.value })} className="flex-1">
+                      <option value="" disabled>Select block…</option>
+                      {blocks.map((b) => <option key={b} value={b}>{b}</option>)}
+                    </Select>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <TextInput value={newBlockText} onChange={(e) => setNewBlockText(e.target.value)} placeholder="Add new block, e.g. 40-A" className="flex-1" />
+                    <Btn onClick={async () => { await addBlock(newBlockText); patchOpenShift({ block: newBlockText.trim() }); setNewBlockText(''); }} disabled={!newBlockText.trim()}>Add</Btn>
+                  </div>
+                </Section>
+              )}
+
+              {activeType !== 'crawler' && activeType !== 'grader' && activeType !== 'fuel' && (
+                <Section label="Machine hours">
+                  <div className="grid grid-cols-2 gap-3">
+                    <TextInput type="number" inputMode="decimal" placeholder="Start" value={openShift.startHours} onChange={(e) => patchOpenShift({ startHours: e.target.value })} />
+                    <TextInput type="number" inputMode="decimal" placeholder="End" value={openShift.endHours} onChange={(e) => patchOpenShift({ endHours: e.target.value })} />
+                  </div>
+                </Section>
+              )}
+
+              {activeType === 'buncher' && (
+                <Section label="Tree count (end of shift)">
+                  <TextInput type="number" inputMode="numeric" placeholder="0" value={openShift.trees} onChange={(e) => patchOpenShift({ trees: e.target.value })} />
+                </Section>
+              )}
+              {(activeType === 'skidder' || activeType === 'processor') && (
+                <Section label="Production count (end of shift)">
+                  <div className="grid grid-cols-2 gap-3">
+                    <TextInput type="number" inputMode="numeric" placeholder="Spruce" value={openShift.spruce} onChange={(e) => patchOpenShift({ spruce: e.target.value })} />
+                    <TextInput type="number" inputMode="numeric" placeholder="Aspen" value={openShift.aspen} onChange={(e) => patchOpenShift({ aspen: e.target.value })} />
+                  </div>
+                </Section>
+              )}
+              {activeType === 'loader' && (
+                <Section label="Load count (end of shift)">
+                  <div className="grid grid-cols-2 gap-3">
+                    <TextInput type="number" inputMode="numeric" placeholder="Loads" value={openShift.loadCount} onChange={(e) => patchOpenShift({ loadCount: e.target.value })} />
+                    <TextInput type="number" inputMode="numeric" placeholder="Top piles" value={openShift.topPileCount} onChange={(e) => patchOpenShift({ topPileCount: e.target.value })} />
+                  </div>
+                </Section>
+              )}
+              {activeType === 'fuel' && (
+                <Section label="Fuel delivery log">
+                  <div className="space-y-2">
+                    {MACHINES.filter((m) => m.type !== 'fuel').map((m) => (
+                      <div key={m.name} className="rounded-lg p-3 flex items-center justify-between" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+                        <span className="text-sm">{m.name}</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number" inputMode="decimal" placeholder="0"
+                            value={(openShift.fuelLog[m.name] || [''])[0] || ''}
+                            onChange={(e) => patchOpenShift({ fuelLog: { ...openShift.fuelLog, [m.name]: [e.target.value] } })}
+                            className="w-20 rounded-lg px-2 py-1.5 text-sm text-right font-mono focus:outline-none focus:ring-2"
+                            style={{ background: COLORS.surfaceRaised, color: COLORS.ink, border: `1px solid ${COLORS.line}` }}
+                          />
+                          <span className="text-xs" style={{ color: COLORS.inkDim }}>L</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              <ExtraTasksEditor shift={openShift} onAdd={addExtraTask} onRemove={removeExtraTask} />
+
+              <Section label="Notes">
+                <textarea
+                  value={openShift.notes}
+                  onChange={(e) => patchOpenShift({ notes: e.target.value })}
+                  placeholder="Anything else worth logging…"
+                  rows={3}
+                  className="w-full rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 resize-none"
+                  style={{ background: COLORS.surfaceRaised, color: COLORS.ink, border: `1px solid ${COLORS.line}` }}
+                />
+              </Section>
+
+              <DowntimeButton onLog={logDowntime} />
+
+              <div className="mt-6">
+                <Btn onClick={endShift} className="w-full">Clock Out</Btn>
+              </div>
+            </React.Fragment>
+          )}
+
+          <RecentShifts shifts={shifts.filter((s) => s.employee === currentMechanic && s.end).sort((a, b) => b.end.localeCompare(a.end)).slice(0, 5)} />
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- ADMIN SCREEN ----------
+  if (screen === 'admin') {
+    if (!isAdmin && !isForeman) {
+      return (
+        <div style={{ background: COLORS.bg, color: COLORS.ink, minHeight: '100vh' }} className="font-body p-8 flex items-center justify-center">
+          {FONT_STYLE}
+          <div className="text-center">
+            <p className="font-display text-lg font-bold mb-4">Admins/foremen only</p>
+            <Btn onClick={() => setScreen('shift')}>Back to shift</Btn>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div style={{ background: COLORS.bg, color: COLORS.ink, minHeight: '100vh' }} className="font-body p-5 sm:p-8">
+        {FONT_STYLE}
+        <SidebarMenu show={showSidebar} onClose={() => setShowSidebar(false)} mechanic={currentMechanic} role={roleFor(currentMechanic)} onNavigate={setScreen} onLogout={logout} />
+        <div className="max-w-lg mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="font-display text-2xl font-bold">Admin</h1>
+            <button onClick={() => setShowSidebar(true)} className="text-3xl leading-none px-3 py-2 rounded-lg" style={{ color: COLORS.accent, background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>☰</button>
+          </div>
+
+          <Section label="Employees">
+            <div className="space-y-2 mb-3">
+              {mechanics.map((m) => (
+                <div key={m} className="rounded-lg p-3 flex items-center justify-between" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+                  <span className="text-sm font-semibold">{m}</span>
+                  {isAdmin ? (
+                    <select
+                      value={roleFor(m)}
+                      onChange={(e) => setRoleFor(m, e.target.value)}
+                      className="text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2"
+                      style={{ background: COLORS.surfaceRaised, color: COLORS.ink, border: `1px solid ${COLORS.line}` }}
+                    >
+                      <option value="employee">Employee</option>
+                      <option value="foreman">Foreman</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  ) : (
+                    <span className="text-xs uppercase tracking-wide" style={{ color: COLORS.accent }}>{roleFor(m)}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mb-2">
+              <TextInput value={inviteNameDraft} onChange={(e) => setInviteNameDraft(e.target.value)} placeholder="New employee name" className="flex-1" />
+              <Select value={inviteRoleDraft} onChange={(e) => setInviteRoleDraft(e.target.value)} style={{ width: 130 }}>
+                <option value="employee">Employee</option>
+                <option value="foreman">Foreman</option>
+                {isAdmin && <option value="admin">Admin</option>}
+              </Select>
+            </div>
+            <Btn onClick={generateInvite} disabled={!inviteNameDraft.trim() || generatingInvite}>{generatingInvite ? '…' : 'Generate invite link'}</Btn>
+            {generatedInviteLink && (
+              <div className="rounded-lg p-3 mt-3" style={{ background: COLORS.surfaceRaised }}>
+                <p className="text-xs mb-2 break-all font-mono">{generatedInviteLink}</p>
+                <button
+                  onClick={() => { if (navigator.share) navigator.share({ title: 'Harder Contracting — join the team', url: generatedInviteLink }).catch(() => {}); else navigator.clipboard.writeText(generatedInviteLink).catch(() => {}); }}
+                  className="text-xs font-display uppercase tracking-wider font-semibold px-3 py-2 rounded-lg"
+                  style={{ color: COLORS.accent, background: COLORS.surface, border: `1px solid ${COLORS.line}` }}
+                >
+                  {navigator.share ? 'Share link' : 'Copy link'}
+                </button>
+              </div>
+            )}
+          </Section>
+
+          {isAdmin && (
+            <Section label="Billing email (biweekly extra-task summary)">
+              <BillingEmailEditor value={settings.billingEmail} onSave={(email) => persistSettings({ ...settings, billingEmail: email })} />
+              <p className="text-xs mt-2" style={{ color: COLORS.inkDim }}>
+                The scheduled email itself still needs a Cloud Function wired up to actually send it — this saves where it should go.
+              </p>
+            </Section>
+          )}
+
+          <Section label="Block numbers">
+            <div className="flex flex-wrap gap-2 mb-3">
+              {blocks.map((b) => (
+                <div key={b} className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+                  {b}
+                  <button onClick={() => persistBlocks(blocks.filter((x) => x !== b))} className="ml-1" style={{ color: COLORS.inkDim }}>×</button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <TextInput value={newBlockText} onChange={(e) => setNewBlockText(e.target.value)} placeholder="e.g. 40-A" className="flex-1" />
+              <Btn onClick={() => { addBlock(newBlockText); setNewBlockText(''); }} disabled={!newBlockText.trim()}>Add</Btn>
+            </div>
+          </Section>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function ExtraTasksEditor({ shift, onAdd, onRemove }) {
+  const [desc, setDesc] = useState('');
+  const [hours, setHours] = useState('');
+  return (
+    <Section label="Extra tasks (billable)">
+      {shift.extraTasks.length > 0 && (
+        <div className="space-y-2 mb-2">
+          {shift.extraTasks.map((t) => (
+            <div key={t.id} className="rounded-lg p-3 flex items-center justify-between" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+              <span className="text-sm">{t.desc}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm" style={{ color: COLORS.inkDim }}>{t.hours}h</span>
+                <button onClick={() => onRemove(t.id)} style={{ color: COLORS.inkDim }}>×</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="rounded-lg p-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+        <TextInput value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Job/crossing # or description" className="mb-2" />
+        <div className="flex gap-2">
+          <TextInput type="number" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="Hours" className="flex-1" />
+          <Btn onClick={() => { onAdd(desc, hours); setDesc(''); setHours(''); }} disabled={!desc.trim() || !hours}>Add</Btn>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function DowntimeButton({ onLog }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  return (
+    <div className="mb-2">
+      {!open ? (
+        <button onClick={() => setOpen(true)} className="w-full font-display font-bold uppercase tracking-wide text-sm py-3 rounded-xl" style={{ border: `2px solid #C1521A`, color: '#C1521A', background: 'transparent' }}>
+          ⚠ Report downtime
+        </button>
+      ) : (
+        <div className="rounded-lg p-4" style={{ background: COLORS.surface, border: `2px solid #C1521A` }}>
+          <p className="text-sm mb-2" style={{ color: COLORS.inkDim }}>This goes to mechanics and supervisors.</p>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="What's going on with the machine?"
+            rows={3}
+            className="w-full rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 mb-3"
+            style={{ background: COLORS.surfaceRaised, color: COLORS.ink, border: `1px solid ${COLORS.line}` }}
+          />
+          <p className="text-xs mb-3" style={{ color: COLORS.inkDim }}>Photo attachment is coming once Firebase Storage is wired in — for now this saves the written report.</p>
+          <div className="flex gap-2">
+            <Btn onClick={() => { onLog(reason); setReason(''); setOpen(false); }} disabled={!reason.trim()}>Send report</Btn>
+            <Btn variant="ghost" onClick={() => { setOpen(false); setReason(''); }}>Cancel</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecentShifts({ shifts }) {
+  if (shifts.length === 0) return null;
+  return (
+    <div className="mt-8">
+      <p className="font-display text-xs uppercase tracking-wider mb-3" style={{ color: COLORS.inkDim }}>Recent shifts</p>
+      <div className="space-y-2">
+        {shifts.map((s) => (
+          <div key={s.id} className="rounded-lg p-3" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
+            <div className="flex justify-between text-sm">
+              <span className="font-semibold">{fmtDate(s.start)} — {s.machine}</span>
+              <span style={{ color: COLORS.inkDim }}>{fmtTime(s.start)}–{fmtTime(s.end)}</span>
+            </div>
+            {s.block && <p className="text-xs mt-1" style={{ color: COLORS.inkDim }}>Block {s.block}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BillingEmailEditor({ value, onSave }) {
+  const [draft, setDraft] = useState(value || '');
+  const [saved, setSaved] = useState(false);
+  return (
+    <div className="flex gap-2">
+      <TextInput type="email" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="billing@example.com" className="flex-1" />
+      <Btn onClick={() => { onSave(draft); setSaved(true); setTimeout(() => setSaved(false), 2000); }}>{saved ? 'Saved ✓' : 'Save'}</Btn>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+
+</body>
+</html>
