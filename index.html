@@ -290,6 +290,7 @@ function SidebarMenu({ show, onClose, mechanic, role, onNavigate, onLogout, onCh
         <div className="space-y-1 mb-4">
           {item('⏱️ Shift', () => onNavigate('shift'))}
           {(role === 'admin' || role === 'foreman') && item('⚙️ Admin', () => onNavigate('admin'))}
+          {item('🔧 Work Order Board', () => { window.location.href = 'https://certifiedjoes-art.github.io/Work-orders/'; })}
         </div>
         <div className="h-px my-4" style={{ background: COLORS.line }} />
         <div className="space-y-1 mb-4">
