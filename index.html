@@ -322,6 +322,11 @@ function App() {
   // employee's language choice is already in place once they land on the
   // board, since auto-login means they may never see its own login screen.
   const [lang, setLangState] = useState(() => localStorage.getItem('appLang') || 'en');
+  // If someone lands here via an explicit "Production Timesheets" link (e.g.
+  // from the Work Order Board's own sidebar), don't auto-bounce them back
+  // out on login just because they're normally a mechanic/admin — they
+  // came here on purpose.
+  const [skipRedirect] = useState(() => new URLSearchParams(window.location.search).get('stay') === '1');
   const setLang = (l) => { localStorage.setItem('appLang', l); setLangState(l); };
   const [mechanics, setMechanics] = useState([]); // SAME shared roster as the work order board (/meta/mechanics)
   const [admins, setAdmins] = useState([]);        // SAME shared /admins array — read here, and added to on admin invites
@@ -446,6 +451,7 @@ function App() {
     await firebase.database().ref('appAssignments/' + slugForMechanic(name)).set(appType);
   };
   const shouldGoToWorkOrderBoard = (name) => roleFor(name) !== 'admin' && appAssignmentFor(name) === 'mechanic';
+
   const handleMechanicTap = (name) => {
     setPinError('');
     setPinInput('');
@@ -462,7 +468,7 @@ function App() {
         localStorage.setItem('deviceMechanic', mechanic);
         setPinModal(null); setPinInput(''); setPinError('');
         setCurrentMechanic(mechanic);
-        if (shouldGoToWorkOrderBoard(mechanic)) {
+        if (!skipRedirect && shouldGoToWorkOrderBoard(mechanic)) {
           window.location.href = WORK_ORDER_BOARD_URL;
           return;
         }
@@ -519,7 +525,7 @@ function App() {
         localStorage.setItem('deviceMechanic', mechanic);
         setCurrentMechanic(mechanic);
         const effectiveAppType = pinModal.appType || 'mechanic';
-        if (role === 'admin' || effectiveAppType === 'mechanic') {
+        if (!skipRedirect && role !== 'admin' && effectiveAppType === 'mechanic') {
           window.location.href = WORK_ORDER_BOARD_URL;
           return;
         }
