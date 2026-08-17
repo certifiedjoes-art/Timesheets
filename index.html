@@ -228,6 +228,7 @@ const MACHINES = [
   { name: 'Crawler 1', type: 'crawler' },
   { name: 'Grader 1', type: 'grader' },
   { name: 'Fuel Truck 1', type: 'fuel' },
+  { name: 'Winch Truck 1', type: 'winch' },
 ];
 function machineType(name) {
   return (MACHINES.find((m) => m.name === name) || {}).type;
@@ -334,6 +335,8 @@ function App() {
   const [blocks, setBlocks] = useState([]);
   const [machineAssignments, setMachineAssignments] = useState({}); // { [slug]: machineName } — baked into their shift automatically
   const [inviteMachineDraft, setInviteMachineDraft] = useState(MACHINES[0].name);
+  const [appAssignments, setAppAssignments] = useState({}); // { [slug]: 'mechanic' | 'production' } — which app they land on after login
+  const [inviteAppDraft, setInviteAppDraft] = useState('mechanic');
   const [shifts, setShifts] = useState([]);
   const [settings, setSettings] = useState({ billingEmail: '' });
   const [newBlockText, setNewBlockText] = useState('');
@@ -385,7 +388,7 @@ function App() {
         if (!data || Date.now() > data.expiresAt) {
           setInviteTokenState('invalid');
         } else {
-          setInviteTokenState({ token, name: data.name, role: data.role || 'employee', machine: data.machine || null });
+          setInviteTokenState({ token, name: data.name, role: data.role || 'employee', machine: data.machine || null, appType: data.appType || 'mechanic' });
         }
       } catch (e) {
         setInviteTokenState('invalid');
@@ -398,7 +401,7 @@ function App() {
     if (inviteTokenState && inviteTokenState !== 'invalid') {
       setPinInput('');
       setPinError('');
-      setPinModal({ mode: 'setup', mechanic: inviteTokenState.name, role: inviteTokenState.role, machine: inviteTokenState.machine, stage: 'first', firstEntry: '' });
+      setPinModal({ mode: 'setup', mechanic: inviteTokenState.name, role: inviteTokenState.role, machine: inviteTokenState.machine, appType: inviteTokenState.appType, stage: 'first', firstEntry: '' });
     }
   }, [inviteTokenState]);
 
@@ -423,6 +426,17 @@ function App() {
     await firebase.database().ref('machineAssignments/' + slugForMechanic(name)).set(machine);
   };
 
+  const WORK_ORDER_BOARD_URL = 'https://certifiedjoes-art.github.io/Work-orders/';
+  // Which app someone lands on after logging in. Defaults to 'mechanic' for
+  // anyone with no explicit assignment yet — that covers the whole existing
+  // crew automatically without needing to touch each person individually.
+  // Admin always heads to the board too, since that's the daily-driver tool.
+  const appAssignmentFor = (name) => appAssignments[slugForMechanic(name)] || 'mechanic';
+  const setAppAssignment = async (name, appType) => {
+    await firebase.database().ref('appAssignments/' + slugForMechanic(name)).set(appType);
+  };
+  const shouldGoToWorkOrderBoard = (name) => roleFor(name) === 'admin' || appAssignmentFor(name) === 'mechanic';
+
   const handleMechanicTap = (name) => {
     setPinError('');
     setPinInput('');
@@ -439,6 +453,10 @@ function App() {
         localStorage.setItem('deviceMechanic', mechanic);
         setPinModal(null); setPinInput(''); setPinError('');
         setCurrentMechanic(mechanic);
+        if (shouldGoToWorkOrderBoard(mechanic)) {
+          window.location.href = WORK_ORDER_BOARD_URL;
+          return;
+        }
         setScreen('shift');
       } catch (e) {
         setPinError('Wrong PIN — try again');
@@ -465,6 +483,9 @@ function App() {
           if (pinModal.machine) {
             await firebase.database().ref('machineAssignments/' + slugForMechanic(mechanic)).set(pinModal.machine);
           }
+          if (pinModal.appType) {
+            await firebase.database().ref('appAssignments/' + slugForMechanic(mechanic)).set(pinModal.appType);
+          }
           if (role === 'admin' && !admins.includes(mechanic)) {
             await firebase.database().ref('admins').set([...admins, mechanic]);
           }
@@ -488,6 +509,11 @@ function App() {
         }
         localStorage.setItem('deviceMechanic', mechanic);
         setCurrentMechanic(mechanic);
+        const effectiveAppType = pinModal.appType || 'mechanic';
+        if (role === 'admin' || effectiveAppType === 'mechanic') {
+          window.location.href = WORK_ORDER_BOARD_URL;
+          return;
+        }
         setScreen('shift');
       }
     }
@@ -512,6 +538,7 @@ function App() {
       name: trimmed,
       role: inviteRoleDraft,
       machine: inviteMachineDraft,
+      appType: inviteAppDraft,
       createdAt: Date.now(),
       expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
     });
@@ -529,6 +556,12 @@ function App() {
     const maRef = firebase.database().ref('machineAssignments');
     const onMa = maRef.on('value', (snap) => setMachineAssignments(snap.val() || {}));
     return () => maRef.off('value', onMa);
+  }, []);
+
+  useEffect(() => {
+    const aaRef = firebase.database().ref('appAssignments');
+    const onAa = aaRef.on('value', (snap) => setAppAssignments(snap.val() || {}));
+    return () => aaRef.off('value', onAa);
   }, []);
 
   useEffect(() => {
@@ -779,7 +812,7 @@ function App() {
                 </Section>
               )}
 
-              {activeType !== 'crawler' && activeType !== 'grader' && activeType !== 'fuel' && (
+              {activeType !== 'crawler' && activeType !== 'grader' && activeType !== 'winch' && activeType !== 'fuel' && (
                 <Section label="Machine hours">
                   <div className="grid grid-cols-2 gap-3">
                     <TextInput type="number" inputMode="decimal" placeholder="Start" value={openShift.startHours} onChange={(e) => patchOpenShift({ startHours: e.target.value })} />
@@ -911,7 +944,7 @@ function App() {
                       <span>{s.machine}{s.block ? ` · Block ${s.block}` : ''}</span>
                       <span className="font-mono" style={{ color: COLORS.accent }}>{productionSummary(s)}</span>
                     </div>
-                   {(shift.extraTasks || []).length > 0 && (
+                    {s.extraTasks && s.extraTasks.length > 0 && (
                       <p className="text-xs mt-1" style={{ color: COLORS.inkDim }}>+ {s.extraTasks.length} extra task{s.extraTasks.length > 1 ? 's' : ''}</p>
                     )}
                     {s.downtimeLog && s.downtimeLog.length > 0 && (
@@ -946,15 +979,30 @@ function App() {
                   </div>
                   {isAdmin ? (
                     <select
-                      value={assignedMachineFor(m)}
-                      onChange={(e) => setAssignedMachine(m, e.target.value)}
-                      className="text-xs rounded-lg px-2 py-1.5 w-full focus:outline-none focus:ring-2"
+                      value={appAssignmentFor(m)}
+                      onChange={(e) => setAppAssignment(m, e.target.value)}
+                      className="text-xs rounded-lg px-2 py-1.5 w-full mb-2 focus:outline-none focus:ring-2"
                       style={{ background: COLORS.surfaceRaised, color: COLORS.inkDim, border: `1px solid ${COLORS.line}` }}
                     >
-                      {MACHINES.map((mc) => <option key={mc.name} value={mc.name}>{mc.name}</option>)}
+                      <option value="mechanic">Mechanic — Work Order Board</option>
+                      <option value="production">Production — Timesheets</option>
                     </select>
                   ) : (
-                    <span className="text-xs" style={{ color: COLORS.inkDim }}>🚜 {assignedMachineFor(m)}</span>
+                    <span className="text-xs block mb-2" style={{ color: COLORS.inkDim }}>{appAssignmentFor(m) === 'mechanic' ? '🔧 Mechanic' : '⏱️ Production'}</span>
+                  )}
+                  {appAssignmentFor(m) === 'production' && (
+                    isAdmin ? (
+                      <select
+                        value={assignedMachineFor(m)}
+                        onChange={(e) => setAssignedMachine(m, e.target.value)}
+                        className="text-xs rounded-lg px-2 py-1.5 w-full focus:outline-none focus:ring-2"
+                        style={{ background: COLORS.surfaceRaised, color: COLORS.inkDim, border: `1px solid ${COLORS.line}` }}
+                      >
+                        {MACHINES.map((mc) => <option key={mc.name} value={mc.name}>{mc.name}</option>)}
+                      </select>
+                    ) : (
+                      <span className="text-xs" style={{ color: COLORS.inkDim }}>🚜 {assignedMachineFor(m)}</span>
+                    )
                   )}
                 </div>
               ))}
@@ -968,11 +1016,19 @@ function App() {
               </Select>
             </div>
             <div className="mb-2">
-              <Select value={inviteMachineDraft} onChange={(e) => setInviteMachineDraft(e.target.value)}>
-                {MACHINES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+              <Select value={inviteAppDraft} onChange={(e) => setInviteAppDraft(e.target.value)}>
+                <option value="mechanic">Mechanic — goes to Work Order Board</option>
+                <option value="production">Production — goes to Timesheets</option>
               </Select>
-              <p className="text-xs mt-1" style={{ color: COLORS.inkDim }}>Which machine this person runs — baked into their timesheet automatically.</p>
             </div>
+            {inviteAppDraft === 'production' && (
+              <div className="mb-2">
+                <Select value={inviteMachineDraft} onChange={(e) => setInviteMachineDraft(e.target.value)}>
+                  {MACHINES.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                </Select>
+                <p className="text-xs mt-1" style={{ color: COLORS.inkDim }}>Which machine this person runs — baked into their timesheet automatically.</p>
+              </div>
+            )}
             <Btn onClick={generateInvite} disabled={!inviteNameDraft.trim() || generatingInvite}>{generatingInvite ? '…' : 'Generate invite link'}</Btn>
             {generatedInviteLink && (
               <div className="rounded-lg p-3 mt-3" style={{ background: COLORS.surfaceRaised }}>
