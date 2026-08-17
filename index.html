@@ -264,7 +264,7 @@ function Section({ label, children }) {
   );
 }
 
-function SidebarMenu({ show, onClose, mechanic, role, onNavigate, onLogout }) {
+function SidebarMenu({ show, onClose, mechanic, role, onNavigate, onLogout, onCheckUpdates }) {
   if (!show) return null;
   const item = (label, onClick) => (
     <button
@@ -290,6 +290,10 @@ function SidebarMenu({ show, onClose, mechanic, role, onNavigate, onLogout }) {
         <div className="space-y-1 mb-4">
           {item('⏱️ Shift', () => onNavigate('shift'))}
           {(role === 'admin' || role === 'foreman') && item('⚙️ Admin', () => onNavigate('admin'))}
+        </div>
+        <div className="h-px my-4" style={{ background: COLORS.line }} />
+        <div className="space-y-1 mb-4">
+          {item('🔄 Check for Updates', onCheckUpdates)}
         </div>
         <div className="h-px my-4" style={{ background: COLORS.line }} />
         {item('🚪 Log out', onLogout)}
@@ -631,6 +635,28 @@ function App() {
     setScreen('login');
   };
 
+  // Since this app and the work order board share the same GitHub Pages
+  // origin (certifiedjoes-art.github.io), service worker registrations and
+  // Cache Storage are shared too — clearing them here clears them for both
+  // apps, not just this one. The cache-busting query string on the reload
+  // is needed because a plain reload isn't always enough to escape a stale
+  // home-screen web app on iOS.
+  const checkForUpdates = async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch (e) {
+      // ignore — the reload below still fetches fresh from network either way
+    }
+    window.location.href = window.location.origin + window.location.pathname + '?_cb=' + Date.now();
+  };
+
   if (loading) {
     return (
       <div style={{ background: COLORS.bg, color: COLORS.ink, minHeight: '100vh' }} className="flex items-center justify-center font-display">
@@ -694,7 +720,7 @@ function App() {
     return (
       <div style={{ background: COLORS.bg, color: COLORS.ink, minHeight: '100vh' }} className="font-body p-5 sm:p-8">
         {FONT_STYLE}
-        <SidebarMenu show={showSidebar} onClose={() => setShowSidebar(false)} mechanic={currentMechanic} role={roleFor(currentMechanic)} onNavigate={setScreen} onLogout={logout} />
+        <SidebarMenu show={showSidebar} onClose={() => setShowSidebar(false)} mechanic={currentMechanic} role={roleFor(currentMechanic)} onNavigate={setScreen} onLogout={logout} onCheckUpdates={checkForUpdates} />
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -840,7 +866,7 @@ function App() {
     return (
       <div style={{ background: COLORS.bg, color: COLORS.ink, minHeight: '100vh' }} className="font-body p-5 sm:p-8">
         {FONT_STYLE}
-        <SidebarMenu show={showSidebar} onClose={() => setShowSidebar(false)} mechanic={currentMechanic} role={roleFor(currentMechanic)} onNavigate={setScreen} onLogout={logout} />
+        <SidebarMenu show={showSidebar} onClose={() => setShowSidebar(false)} mechanic={currentMechanic} role={roleFor(currentMechanic)} onNavigate={setScreen} onLogout={logout} onCheckUpdates={checkForUpdates} />
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between mb-8">
             <h1 className="font-display text-2xl font-bold">Admin</h1>
