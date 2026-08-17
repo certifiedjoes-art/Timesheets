@@ -911,7 +911,7 @@ function App() {
                       <span>{s.machine}{s.block ? ` · Block ${s.block}` : ''}</span>
                       <span className="font-mono" style={{ color: COLORS.accent }}>{productionSummary(s)}</span>
                     </div>
-                    {s.extraTasks && s.extraTasks.length > 0 && (
+                   {(shift.extraTasks || []).length > 0 && (
                       <p className="text-xs mt-1" style={{ color: COLORS.inkDim }}>+ {s.extraTasks.length} extra task{s.extraTasks.length > 1 ? 's' : ''}</p>
                     )}
                     {s.downtimeLog && s.downtimeLog.length > 0 && (
