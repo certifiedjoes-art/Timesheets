@@ -445,8 +445,7 @@ function App() {
   const setAppAssignment = async (name, appType) => {
     await firebase.database().ref('appAssignments/' + slugForMechanic(name)).set(appType);
   };
-  const shouldGoToWorkOrderBoard = (name) => roleFor(name) === 'admin' || appAssignmentFor(name) === 'mechanic';
-
+  const shouldGoToWorkOrderBoard = (name) => roleFor(name) !== 'admin' && appAssignmentFor(name) === 'mechanic';
   const handleMechanicTap = (name) => {
     setPinError('');
     setPinInput('');
